@@ -1,9 +1,22 @@
+import csv
 import os
+import secrets
 import sqlite3
 from datetime import datetime
 from functools import wraps
+from io import StringIO
 
-from flask import Flask, flash, g, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    flash,
+    g,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -12,6 +25,7 @@ DATABASE = os.path.join(BASE_DIR, "finanzas.db")
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "cambia-esta-clave-en-produccion")
 app.config["INVITE_CODE"] = os.getenv("APP_INVITE_CODE", "finanzas-privadas")
+app.config["DEBUG"] = os.getenv("APP_DEBUG", "false").lower() == "true"
 
 
 def get_db():
@@ -55,6 +69,25 @@ def init_db():
     db.close()
 
 
+def ensure_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_urlsafe(24)
+
+
+def validate_csrf_token():
+    token = request.form.get("csrf_token", "")
+    if not token or token != session.get("csrf_token"):
+        flash("Token de seguridad inválido. Recarga la página e intenta de nuevo.")
+        return False
+    return True
+
+
+@app.before_request
+def bootstrap_request_context():
+    init_db()
+    ensure_csrf_token()
+
+
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
@@ -76,12 +109,18 @@ def index():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
+        if not validate_csrf_token():
+            return render_template("register.html")
+
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         invite_code = request.form.get("invite_code", "")
 
-        if not username or not password:
-            flash("Usuario y contraseña son obligatorios.")
+        if len(username) < 3:
+            flash("El usuario debe tener al menos 3 caracteres.")
+            return render_template("register.html")
+        if len(password) < 8:
+            flash("La contraseña debe tener al menos 8 caracteres.")
             return render_template("register.html")
         if invite_code != app.config["INVITE_CODE"]:
             flash("Código de invitación inválido.")
@@ -105,6 +144,9 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        if not validate_csrf_token():
+            return render_template("login.html")
+
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
@@ -115,6 +157,7 @@ def login():
             session.clear()
             session["user_id"] = user["id"]
             session["username"] = user["username"]
+            ensure_csrf_token()
             return redirect(url_for("dashboard"))
 
         flash("Credenciales inválidas.")
@@ -122,8 +165,12 @@ def login():
     return render_template("login.html")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
+@login_required
 def logout():
+    if not validate_csrf_token():
+        return redirect(url_for("dashboard"))
+
     session.clear()
     flash("Sesión cerrada.")
     return redirect(url_for("login"))
@@ -165,6 +212,9 @@ def dashboard():
 @app.route("/transactions/new", methods=["POST"])
 @login_required
 def new_transaction():
+    if not validate_csrf_token():
+        return redirect(url_for("dashboard"))
+
     date = request.form.get("date", "").strip()
     category = request.form.get("category", "").strip()
     amount_raw = request.form.get("amount", "").strip()
@@ -203,6 +253,9 @@ def new_transaction():
 @app.route("/transactions/<int:tx_id>/delete", methods=["POST"])
 @login_required
 def delete_transaction(tx_id):
+    if not validate_csrf_token():
+        return redirect(url_for("dashboard"))
+
     db = get_db()
     db.execute("DELETE FROM transactions WHERE id = ? AND user_id = ?", (tx_id, session["user_id"]))
     db.commit()
@@ -210,6 +263,32 @@ def delete_transaction(tx_id):
     return redirect(url_for("dashboard"))
 
 
+@app.route("/transactions/export.csv")
+@login_required
+def export_transactions_csv():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT date, category, amount, kind, note
+        FROM transactions
+        WHERE user_id = ?
+        ORDER BY date DESC, id DESC
+        """,
+        (session["user_id"],),
+    ).fetchall()
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["fecha", "categoria", "monto", "tipo", "nota"])
+    for row in rows:
+        writer.writerow([row["date"], row["category"], f"{row['amount']:.2f}", row["kind"], row["note"] or ""])
+
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = "attachment; filename=movimientos.csv"
+    return response
+
+
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True)
+    app.run(debug=app.config["DEBUG"])

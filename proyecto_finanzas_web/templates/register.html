@@ -3,8 +3,9 @@
 {% block content %}
 <h1>Crear cuenta</h1>
 <form method="post" class="card">
-  <label>Usuario<input type="text" name="username" required /></label>
-  <label>Contraseña<input type="password" name="password" required /></label>
+  <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}" />
+  <label>Usuario<input type="text" name="username" minlength="3" required /></label>
+  <label>Contraseña<input type="password" name="password" minlength="8" required /></label>
   <label>Código de invitación<input type="password" name="invite_code" required /></label>
   <button type="submit">Crear</button>
 </form>

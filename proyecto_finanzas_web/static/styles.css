@@ -1,10 +1,12 @@
 body { font-family: Arial, sans-serif; background: #f5f7fb; margin: 0; }
 .container { max-width: 1024px; margin: 2rem auto; padding: 0 1rem; }
 .card { background: #fff; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; }
+.header-actions { display: flex; align-items: center; gap: .8rem; }
+.header-actions form { margin: 0; }
 .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 label { display: block; margin-bottom: .6rem; }
-input, select, button { display: block; width: 100%; margin-top: .2rem; padding: .5rem; }
+input, select, button { display: block; width: 100%; margin-top: .2rem; padding: .5rem; box-sizing: border-box; }
 button { cursor: pointer; background: #2253d1; color: #fff; border: none; border-radius: 8px; }
 button.danger { background: #be123c; }
 .big { font-size: 2rem; font-weight: 700; margin: .4rem 0; }

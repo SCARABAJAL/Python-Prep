@@ -3,6 +3,7 @@
 {% block content %}
 <h1>Acceso privado</h1>
 <form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ session.csrf_token }}" />
   <label>Usuario<input type="text" name="username" required /></label>
   <label>Contraseña<input type="password" name="password" required /></label>
   <button type="submit">Entrar</button>
